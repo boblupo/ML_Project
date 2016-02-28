@@ -159,12 +159,22 @@ testPrediction
     
 ```
 
-
-
 ####Final Write up for submission
+#####Conclusions
+The accuracy of the model using randomForest and cross-validation was very high. Oddly, the test data was more accurately predicted than the training set. It may be supposed that a accuracies were similar and that this may have been due to an unusual or complex data set rife with missing data values.
 
+* Generation of the files to be submitted by function - Show on document, also.
+```{r,eval=FALSE}
+pml_write_files = function(x){
+        n = length(x)
+        for(i in 1:n){
+                filename = paste0("problem_id_",i,".txt")
+                write.table(x[i],file=filename,quote=FALSE,row.names=FALSE,col.names=FALSE)
+        }
+}
+pml_write_files(testPrediction)
 
-
+```
 
 
 
