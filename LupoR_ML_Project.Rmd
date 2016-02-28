@@ -1,0 +1,176 @@
+---
+author: "Robert A Lupo"
+date: "February 23, 2016"
+output: html_document
+---
+###Analysis of Subject Exercise Routine Effectiveness Using Barbells
+
+####Executive Summary
+The public is often bombarded by fitness regimes that promise maximum results in minimal time. Technology has allowed us to monitor over time the progress of individuals in a quantitative manner but unfortunately lacking a qualitative assessment. Using a weight lifting dataset highlighted at http://groupware.les.inf.puc-rio.br/har we attempt to design a predictive model as to the quality of a subject's movements in the lifting of barbells (weights).
+
+The database contains a "classe" variable that associates a subject's movements with a category depicting the effectiveness of these movements using five different factors ranking "A" as correct and "B - E" as various incorrect motions. The model will be trained then asserted on a test sample of twenty cases supplied by the course manager via a hyperlink.
+
+####Reproduceability: Datasets, R packages 
+
+* Data sets   
+    + Training set:  https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv  
+    + Testing set:   https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+* R version 3.2.3 (2015-12-10)
+* RStudio Version 0.99.489 - © 2009-2015 RStudio, Inc.
+* Packages
+    + caret, lattice, ggplot2
+    + randomforest
+```{r, results = 'hide'}
+library(lattice); library(ggplot2); library(randomForest); library(caret)
+```
+
+####Exploratory Analysis and Cleaning
+* R Coding set as echo=FALSE unless indicated otherwise. Code & Results sometimes shown as text.
+* Import data sets / set unusable values to NA:
+```{r, echo = FALSE,results='hide', cache=TRUE}
+urlTrain <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+urlTest  <- "http://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+training <- read.csv(url(urlTrain), na.strings=c("NA","#DIV/0!",""))
+testing  <- read.csv(url(urlTest), na.strings=c("NA","#DIV/0!",""))
+set.seed(1111)
+```
+
+
+* Compare data sets to ensure correct dimensions:
+```{r, echo=FALSE}
+   dim(testing);dim(training)
+```
+    +  dim(testing)       [1]    20  160
+    +  dim(training)      [1] 19622  160
+    
+* Remove all columns (predictors) containing any NA values -  there are no 'NA's in "classe". 
+* Helps prevent outliers and poorly represented predictor values from biasing cross validation model
+* Check column count
+    + training <- training[, colSums(is.na(inTraining)) > 0]
+    + testing  <- testing[, colSums(is.na(testing))     > 0] 
+    + ncols(training) == ncols(testing)   [1] TRUE
+```{r, echo =FALSE}
+    training <- training[, colSums(is.na(training)) == 0]
+    testing  <- testing[, colSums(is.na(testing)) == 0] 
+    ncol(training) == ncol(testing)               
+    ```
+* Compare data sets to ensure correct dimensions:
+```{r}
+   dim(testing);dim(training)
+```
+
+* Visual inspection determines variables 1-6 are not applicable to the analysis
+    + training     <- inTraining[, -(1:6)]
+    + testing      <- testing[, -(1:6)]
+ 
+```{r, echo=FALSE} 
+    training     <- training[, -(1:6)]
+    testing      <- testing[, -(1:6)]
+```    
+*Determine final number of columns and determine  "classe" response variable location.
+    + ncol(training)    
+    + index_classe = grep("classe", colnames(training))
+
+```{r,echo=FALSE}
+   ncol(training)
+   index.classe = grep("classe", colnames(training))
+   index.classe
+```
+
+####Cross validation 
+* Is an estimation/measure technique that uses a test set (out-of-sample estimation) different than the train set (in-sample error).
+* inTraining set will consist of 75% of the training set and the remaining 25% will comprise the inValidation set.
+
+    + inTraining   <- createDataPartition(y=training$classe, p=0.75, list=FALSE)
+    + inTraining   <- training[inTrain, ] 
+    + inValidation <- training[-inTrain, ]    
+
+```{r, echo =FALSE}
+    inTrain   <- createDataPartition(y=training$classe, p=0.75, list=FALSE)
+    inTraining   <- training[ inTrain, ] 
+    inValidation <- training[-inTrain, ]    
+```
+The variable being predicted on is 'classe'. Its type is shown using:
+```{r}
+    class(training$classe)
+```
+
+This allows the use of accuracy as our chosen error type. The chosen model will be the random forest algorithm. Selection based on ML course suggestion as being highly accurate and less time intensive as other methods, i.e. boosting.
+
+####Preprocessing data sets
+* using Principal Components Analysis (PCA)
+* PCA reduces the dimensionality of data containing a large set of variables. 
+* This is achieved by transforming the initial variables into a new small set of variables without losing the most important information in the original data set.
+PCA is passed to the train() function via its parameter *trControl = trainControl*
+    + ctrl <- trainControl(preProcOptions = "pca") 
+
+####Machine Learning Model for prediction
+We next build the model where 'classe' is the response variable, as noted the predictors have been determined by cleaning and using PCA. The caret function *train()* is used and passed the method chosen, *RandomForest* and parameters via its *trControl* parameter.
+    + ctrl <- trainControl(method ="cv", number = 4,  preProcOptions = list(thresh = 0.99))
+```{r}
+   ctrl <- trainControl(method ="cv", number = 4,  preProcOptions = list(thresh = 0.99))
+```
+#####RandomForest (rf)
+Random forests improve predictive accuracy by generating a large number of bootstrapped trees (based on random samples of variables), classifying a case using each tree in this new "forest", and deciding a final predicted outcome by combining the results across all of the trees (an average in regression, a majority vote in classification). http://www.statmethods.net/advstats/cart.html 
+```{r, echo=FALSE}
+    modelFit_rf <- randomForest(inTraining$classe~., data=inTraining[,-54], trControl = ctrl)
+```
+* Check the final model fit
+
+    + Accuracy =  Different than in the caret package. Calculated by 1 - OOB (out of bag)
+    + In-Sample-Error: OOB
+    + OOB is the number of misclassified observations over the total number of observations but estimated based on combining trees
+   
+    
+```{r}
+modelFit_rf
+```
+
+####Analysis of predicted Results
+* Apply model to the Validation data set 
+* ConfusionMatrix
+    + Accuracy
+    + In Sample Error
+```{r}
+rfPrediction <- predict(modelFit_rf,inValidation[,-54])
+confusionMatrix(rfPrediction, inValidation$classe)
+comparePrediction = sum(rfPrediction == inValidation$classe)/length(rfPrediction)
+comparePrediction
+
+```
+
+* Calculate Out-of-sample accuracy - missclassified observations/total observations
+```{r}
+OSAcc <- sum((rfPrediction == inValidation$classe)/length(rfPrediction) )
+OSAcc
+```
+* Calculate Out-of-sample error estimation - 1 minus Out-of-sample accuracy 
+```{r,echo=FALSE}
+paste0("Out-of-sample error estimated: ", round(((1 - OSAcc) * 100),digits = 2), "%") 
+paste0("In-sample error estimated: ", 0.19, "%") 
+```
+* It is expected that out-of-sample error to be greater than in-sample-error to to the 'fitting' of the model to the training set.
+* This OOB error estimation is close to but higher than the validation set. Issues of over-fitting in the training set may be an issue.
+
+```{r}
+    
+testPrediction <- predict(modelFit_rf, testing[,-54]) 
+testPrediction    
+    
+```
+
+
+
+####Final Write up for submission
+
+
+
+
+
+
+
+
+
+
+
+
